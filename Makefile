@@ -1,25 +1,64 @@
-TARGETS = linux-386 linux-amd64 linux-arm linux-arm64 darwin-amd64 windows-386 windows-amd64
-COMMAND_NAME = httpstat
-PACKAGE_NAME = github.com/davecheney/$(COMMAND_NAME)
-LDFLAGS = -ldflags=-X=main.version=$(VERSION)
-OBJECTS = $(patsubst $(COMMAND_NAME)-windows-amd64%,$(COMMAND_NAME)-windows-amd64%.exe, $(patsubst $(COMMAND_NAME)-windows-386%,$(COMMAND_NAME)-windows-386%.exe, $(patsubst %,$(COMMAND_NAME)-%-v$(VERSION), $(TARGETS)))) 
+PROJECT_NAME= httpstat
 
-release: check-env $(OBJECTS) ## Build release binaries (requires VERSION)
 
-clean: check-env ## Remove release binaries
-	rm $(OBJECTS)
+GOBASE=$(shell pwd)
+GOFILES=$(wildcard *.go)
 
-$(OBJECTS): $(wildcard *.go)
-	env GOOS=`echo $@ | cut -d'-' -f2` GOARCH=`echo $@ | cut -d'-' -f3 | cut -d'.' -f 1` go build -o $@ $(LDFLAGS) $(PACKAGE_NAME)
 
-.PHONY: help check-env
+BRANCH := $(shell git symbolic-ref HEAD 2>/dev/null | cut -d"/" -f 3)
+# BRANCH := `git fetch --tags && git tag | sort -V | tail -1`
+# BUILD := $(shell git rev-parse --short HEAD)
+BUILD_DIR := $(GOBASE)/dist
+VERSION = $(BRANCH)
 
-check-env:
-ifndef VERSION
-	$(error VERSION is undefined)
-endif
+BuildTime := $(shell date -u  '+%Y-%m-%d %H:%M:%S %Z')
+GitHash := $(shell git rev-parse HEAD)
+GoVersion = $(shell go version | cut -d " " -f 3 )
 
-help:
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
-.DEFAULT_GOAL := help
+PKGFLAGS := " -s -w "
+
+APP_NAME = $(PROJECT_NAME)
+# go-pkg.v0.1.1-linux-amd64
+
+.PHONY: clean
+clean:
+	@-rm -rf dist/$(PROJECT_NAME)* 
+
+.PHONY: serve
+serve:
+	go run .
+
+.PHONY: build
+build: clean
+	@go build -trimpath -ldflags $(PKGFLAGS) -o "dist/$(APP_NAME)" 
+	@echo "\n******************************"
+	@echo "         build succeed "
+	@echo "******************************\n"
+	@ls -la dist/$(PROJECT_NAME)*
+	@echo
+
+.PHONY: build-linux
+build-linux: clean
+	@go mod tidy
+	@GOOS="linux"   GOARCH="amd64" go build -trimpath -ldflags $(PKGFLAGS) -v -o "dist/$(APP_NAME)-linux-amd64"       
+	@GOOS="linux"   GOARCH="arm64" go build -trimpath -ldflags $(PKGFLAGS) -v -o "dist/$(APP_NAME)-linux-arm64"    
+	@echo "\n******************************"
+	@echo "      build linux succeed "
+	@echo "******************************\n"
+	@ls -la dist/$(PROJECT_NAME)*
+	@echo
+
+.PHONY: release
+release: clean
+	@go mod tidy
+	@GOOS="windows" GOARCH="amd64" go build -trimpath -ldflags $(PKGFLAGS) -v -o "dist/$(APP_NAME)-windows-amd64.exe" 
+	@GOOS="linux"   GOARCH="amd64" go build -trimpath -ldflags $(PKGFLAGS) -v -o "dist/$(APP_NAME)-linux-amd64"       
+	@GOOS="linux"   GOARCH="arm64" go build -trimpath -ldflags $(PKGFLAGS) -v -o "dist/$(APP_NAME)-linux-arm64"       
+	@GOOS="darwin"  GOARCH="amd64" go build -trimpath -ldflags $(PKGFLAGS) -v -o "dist/$(APP_NAME)-darwin-amd64"      
+	@GOOS="darwin"  GOARCH="arm64" go build -trimpath -ldflags $(PKGFLAGS) -v -o "dist/$(APP_NAME)-darwin-arm64"      
+	@echo "\n******************************"
+	@echo "        release succeed "
+	@echo "******************************\n"
+	@ls -la dist/$(PROJECT_NAME)*
+	@echo
